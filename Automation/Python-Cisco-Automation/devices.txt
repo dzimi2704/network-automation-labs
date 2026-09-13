@@ -1,0 +1,15 @@
+devices:
+  - name: R1
+    device_type: cisco_ios
+    host: 10.10.10.11
+    username: admin
+
+  - name: R2
+    device_type: cisco_ios
+    host: 10.10.10.12
+    username: admin
+
+  - name: SW1
+    device_type: cisco_ios
+    host: 10.10.10.21
+    username: admin

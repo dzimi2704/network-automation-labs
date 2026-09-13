@@ -1,0 +1,49 @@
+from netmiko import ConnectHandler
+from getpass import getpass
+from datetime import datetime
+from pathlib import Path
+import yaml
+
+
+BACKUP_DIR = Path("backups")
+BACKUP_DIR.mkdir(exist_ok=True)
+
+with open("devices.yml", "r") as file:
+    inventory = yaml.safe_load(file)
+
+password = getpass("Enter device password: ")
+
+for device in inventory["devices"]:
+    print(f"\nConnecting to {device['name']} ({device['host']})...")
+
+    connection_params = {
+        "device_type": device["device_type"],
+        "host": device["host"],
+        "username": device["username"],
+        "password": password,
+    }
+
+    try:
+        connection = ConnectHandler(**connection_params)
+
+        hostname = connection.find_prompt().replace("#", "").replace(">", "").strip()
+        print(f"Connected to {hostname}")
+
+
+        running_config = connection.send_command("show running-config")
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+        filename = (
+            BACKUP_DIR
+            / f"{device['name']}_running-config_{timestamp}.txt"
+        )
+
+        filename.write_text(running_config)
+
+        print(f"Backup saved: {filename}")
+
+        connection.disconnect()
+
+    except Exception as error:
+        print(f"ERROR on {device['name']}: {error}")

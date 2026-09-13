@@ -1,0 +1,81 @@
+from netmiko import ConnectHandler
+from getpass import getpass
+from datetime import datetime
+from pathlib import Path
+import yaml
+
+
+BACKUP_DIR = Path("backups")
+BACKUP_DIR.mkdir(exist_ok=True)
+
+with open("devices.yml", "r") as file:
+    inventory = yaml.safe_load(file)
+
+switch = next(
+    device for device in inventory["devices"]
+    if device["name"] == "SW1"
+)
+
+password = getpass("Enter device password: ")
+
+vlan_id = input("Enter VLAN ID: ").strip()
+vlan_name = input("Enter VLAN name: ").strip()
+
+connection_params = {
+    "device_type": switch["device_type"],
+    "host": switch["host"],
+    "username": switch["username"],
+    "password": password,
+}
+
+try:
+    print(f"\nConnecting to {switch['name']} ({switch['host']})...")
+
+    connection = ConnectHandler(**connection_params)
+
+    hostname = connection.find_prompt().replace("#", "").replace(">", "").strip()
+    print(f"Connected to {hostname}")
+
+    config_commands = [
+        f"vlan {vlan_id}",
+        f"name {vlan_name}",
+    ]
+
+    print(f"\nCreating VLAN {vlan_id} - {vlan_name}...")
+
+    output = connection.send_config_set(config_commands)
+    print(output)
+
+    vlan_output = connection.send_command("show vlan brief")
+
+    vlan_found = False
+
+    for line in vlan_output.splitlines():
+        columns = line.split()
+
+        if columns and columns[0] == vlan_id:
+            vlan_found = True
+            break
+
+    if vlan_found:
+        print(f"\nSUCCESS: VLAN {vlan_id} exists on {hostname}.")
+    else:
+        print(f"\nFAILED: VLAN {vlan_id} was not found on {hostname}.")
+
+    running_config = connection.send_command("show running-config")
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    filename = (
+        BACKUP_DIR
+        / f"{switch['name']}_after_vlan_{vlan_id}_{timestamp}.txt"
+    )
+
+    filename.write_text(running_config)
+
+    print(f"Post-change backup saved: {filename}")
+
+    connection.disconnect()
+
+except Exception as error:
+    print(f"\nERROR: {error}")
